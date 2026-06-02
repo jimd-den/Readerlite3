@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Effortless SQ5R",
+  "description": "An effortless SQ5R study reader with customizable typography variations, outline annotations, and open AI rewriting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
