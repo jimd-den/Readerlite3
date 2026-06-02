@@ -96,8 +96,19 @@ class EpubExtractorImpl : EpubExtractor {
         }
 
         // 5. Step 4: Parse Navigation outlines (EPUB 3 Nav vs EPUB 2 NCX or fallbacks)
+        val resolvedNcxHref = manifest.ncxDocumentHref?.let {
+            resolveRelativePath(opfFolderPrefix + safeUrlDecode(it))
+        }
+        val resolvedNavHref = manifest.navDocumentHref?.let {
+            resolveRelativePath(opfFolderPrefix + safeUrlDecode(it))
+        }
+        val resolvedManifest = manifest.copy(
+            ncxDocumentHref = resolvedNcxHref,
+            navDocumentHref = resolvedNavHref
+        )
+
         val outline = try {
-            val (navOutline, navMessages) = buildNavigationUseCase.execute(normalizedZipMap, manifest, parsingMode)
+            val (navOutline, navMessages) = buildNavigationUseCase.execute(normalizedZipMap, resolvedManifest, parsingMode)
             navMessages.forEach { msg ->
                 Log.d(TAG, "[Navigation Parsing] ${msg.severity}: ${msg.message}")
             }

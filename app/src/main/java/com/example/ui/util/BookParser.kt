@@ -395,7 +395,14 @@ object BookParser {
         if (opfEntry != null && resolvedNavHref != null) {
             val navPathInZip = (opfFolderPrefix + resolvedNavHref).lowercase()
                 .replace('\\', '/').replace("//", "/").trimStart('/')
-            val navBytes = normalizedZipMap[navPathInZip]
+            var navBytes = normalizedZipMap[navPathInZip]
+            if (navBytes == null) {
+                val navSuffix = if (resolvedNavHref.contains("/")) resolvedNavHref.substringAfterLast("/") else resolvedNavHref
+                val navSuffixKey = normalizedZipMap.keys.find { it == navSuffix.lowercase() || it.endsWith("/" + navSuffix.lowercase()) }
+                if (navSuffixKey != null) {
+                    navBytes = normalizedZipMap[navSuffixKey]
+                }
+            }
             if (navBytes != null) {
                 val navXmlStr = String(navBytes, Charsets.UTF_8)
                 val items = parseEpub3Nav(navXmlStr, navPathInZip)
@@ -412,7 +419,14 @@ object BookParser {
             if (resolvedNcxHref != null) {
                 val ncxPathInZip = (opfFolderPrefix + resolvedNcxHref).lowercase()
                     .replace('\\', '/').replace("//", "/").trimStart('/')
-                val ncxBytes = normalizedZipMap[ncxPathInZip]
+                var ncxBytes = normalizedZipMap[ncxPathInZip]
+                if (ncxBytes == null) {
+                    val ncxSuffix = if (resolvedNcxHref.contains("/")) resolvedNcxHref.substringAfterLast("/") else resolvedNcxHref
+                    val ncxSuffixKey = normalizedZipMap.keys.find { it == ncxSuffix.lowercase() || it.endsWith("/" + ncxSuffix.lowercase()) }
+                    if (ncxSuffixKey != null) {
+                        ncxBytes = normalizedZipMap[ncxSuffixKey]
+                    }
+                }
                 if (ncxBytes != null) {
                     val ncxXmlStr = String(ncxBytes, Charsets.UTF_8)
                     val items = parseEpub2Ncx(ncxXmlStr, ncxPathInZip)
@@ -737,7 +751,14 @@ object BookParser {
         if (opfEntry != null && resolvedNavHref != null) {
             val navPathInZip = (opfFolderPrefix + resolvedNavHref).lowercase()
                 .replace('\\', '/').replace("//", "/").trimStart('/')
-            val navBytes = normalizedZipMap[navPathInZip]
+            var navBytes = normalizedZipMap[navPathInZip]
+            if (navBytes == null) {
+                val navSuffix = if (resolvedNavHref.contains("/")) resolvedNavHref.substringAfterLast("/") else resolvedNavHref
+                val navSuffixKey = normalizedZipMap.keys.find { it == navSuffix.lowercase() || it.endsWith("/" + navSuffix.lowercase()) }
+                if (navSuffixKey != null) {
+                    navBytes = normalizedZipMap[navSuffixKey]
+                }
+            }
             if (navBytes != null) {
                 val navXmlStr = String(navBytes, Charsets.UTF_8)
                 val items = parseEpub3Nav(navXmlStr, navPathInZip)
@@ -755,7 +776,14 @@ object BookParser {
             if (resolvedNcxHref != null) {
                 val ncxPathInZip = (opfFolderPrefix + resolvedNcxHref).lowercase()
                     .replace('\\', '/').replace("//", "/").trimStart('/')
-                val ncxBytes = normalizedZipMap[ncxPathInZip]
+                var ncxBytes = normalizedZipMap[ncxPathInZip]
+                if (ncxBytes == null) {
+                    val ncxSuffix = if (resolvedNcxHref.contains("/")) resolvedNcxHref.substringAfterLast("/") else resolvedNcxHref
+                    val ncxSuffixKey = normalizedZipMap.keys.find { it == ncxSuffix.lowercase() || it.endsWith("/" + ncxSuffix.lowercase()) }
+                    if (ncxSuffixKey != null) {
+                        ncxBytes = normalizedZipMap[ncxSuffixKey]
+                    }
+                }
                 if (ncxBytes != null) {
                     val ncxXmlStr = String(ncxBytes, Charsets.UTF_8)
                     val items = parseEpub2Ncx(ncxXmlStr, ncxPathInZip)

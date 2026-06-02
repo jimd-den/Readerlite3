@@ -623,7 +623,14 @@ class EpubNavigationParserImpl(
 
     private fun findCaseInsensitiveFileKey(zipFiles: Map<String, ByteArray>, path: String): String? {
         val lower = path.lowercase().replace('\\', '/').trimStart('/')
-        return zipFiles.keys.find { it.lowercase().replace('\\', '/').trimStart('/') == lower }
+        val exactMatch = zipFiles.keys.find { it.lowercase().replace('\\', '/').trimStart('/') == lower }
+        if (exactMatch != null) return exactMatch
+        
+        val suffix = if (lower.contains("/")) lower.substringAfterLast("/") else lower
+        return zipFiles.keys.find {
+            val keyLower = it.lowercase().replace('\\', '/').trimStart('/')
+            keyLower == suffix || keyLower.endsWith("/$suffix")
+        }
     }
 }
 
@@ -712,7 +719,14 @@ class EpubContentExtractorImpl(
 
     private fun findCaseInsensitiveFileKey(zipFiles: Map<String, ByteArray>, path: String): String? {
         val lower = path.lowercase().replace('\\', '/').trimStart('/')
-        return zipFiles.keys.find { it.lowercase().replace('\\', '/').trimStart('/') == lower }
+        val exactMatch = zipFiles.keys.find { it.lowercase().replace('\\', '/').trimStart('/') == lower }
+        if (exactMatch != null) return exactMatch
+        
+        val suffix = if (lower.contains("/")) lower.substringAfterLast("/") else lower
+        return zipFiles.keys.find {
+            val keyLower = it.lowercase().replace('\\', '/').trimStart('/')
+            keyLower == suffix || keyLower.endsWith("/$suffix")
+        }
     }
 
     private fun selectContentByAnchor(html: String, anchor: String): String {
