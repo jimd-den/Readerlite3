@@ -22,6 +22,7 @@ class EpubExtractorImpl : EpubExtractor {
     private val parsePackageUseCase = ParsePackageDocumentUseCase(EpubPackageParserImpl(sanitizer))
     private val buildNavigationUseCase = BuildNavigationOutlineUseCase(EpubNavigationParserImpl(sanitizer))
     private val classifyContentUseCase = ClassifyContentUseCase()
+    private val normalizeNavigationOutlineUseCase = NormalizeNavigationOutlineUseCase(classifyContentUseCase)
     private val extractReadableSectionsUseCase = ExtractReadableSectionsUseCase(EpubContentExtractorImpl(sanitizer))
 
     override fun parseEpub(inputStream: InputStream): EpubStructureDomainModel {
@@ -118,31 +119,29 @@ class EpubExtractorImpl : EpubExtractor {
             BookOutline(emptyList())
         }
 
+        val normalizedOutline = try {
+            normalizeNavigationOutlineUseCase.execute(outline, resolvedManifest)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to normalize navigation outline", e)
+            outline
+        }
+
         // 6. Map parsed hierarchical outline to Flat Chapters Sequence (for Room DB legacy schema compatibility)
         // We preserve full parenthood pointers, nesting depth, and classifications!
-        val flatOutlineList = outline.flatten()
+        val flatOutlineList = normalizedOutline.flatten()
         val unifiedTocItems = flatOutlineList.map { node ->
             val decodedNodeHref = safeUrlDecode(node.href)
             val zipPathInZip = getAbsoluteZipPath(decodedNodeHref, opfFolderPrefix)
             val fragment = getFragment(decodedNodeHref)
             
-            // Classification signal filtering
-            val classificationResult = classifyContentUseCase.determineClassification(
-                href = node.href,
-                isLinear = true,
-                properties = manifest.manifestItems[node.href.substringBefore("#")]?.properties,
-                title = node.title,
-                depth = node.depth
-            )
-            
-            val isSub = classificationResult.second == OutlineNodeType.SUBSECTION || node.depth > 0
+            val isSub = node.type == OutlineNodeType.SUBSECTION || node.type == OutlineNodeType.SECTION || node.depth > 0
 
             TempTocItem(
                 title = node.title,
                 zipPath = zipPathInZip,
                 fragment = fragment,
                 originalHref = node.href,
-                isSubchapter = isSub,
+                isSubchapter = !node.isBodyMatter || isSub,
                 parentTitle = node.parentId, // populated below with readable node title pairs if desired
                 nestingLevel = node.depth
             )

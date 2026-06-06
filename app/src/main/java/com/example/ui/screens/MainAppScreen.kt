@@ -147,6 +147,11 @@ fun MainAppScreen(
     val rewriteError by viewModel.rewriteError.collectAsState()
     val activeRewrite by viewModel.activeRewrite.collectAsState()
     val currentReadingMode by viewModel.currentReadingMode.collectAsState()
+
+    val wikiRecommendations by viewModel.wikiRecommendations.collectAsState()
+    val isGeneratingWiki by viewModel.isGeneratingWiki.collectAsState()
+    val wikiError by viewModel.wikiError.collectAsState()
+    val nextChapter by viewModel.nextChapter.collectAsState()
     val rewrittenSentences by viewModel.rewrittenSentences.collectAsState()
 
     // Preferences & Engine states
@@ -389,6 +394,12 @@ fun MainAppScreen(
                 is ScreenState.ClassDetail -> {
                     ClassWorkspaceScreen(
                         books = books,
+                        wikiRecommendations = wikiRecommendations,
+                        isGeneratingWiki = isGeneratingWiki,
+                        wikiError = wikiError,
+                        onGenerateRecommendations = { prompt -> viewModel.generateWikiRecommendations(prompt) },
+                        onDownloadBook = { rec -> viewModel.downloadWikipediaBook(rec) },
+                        onClearRecommendations = { viewModel.clearWikiRecommendations() },
                         onAddBookClick = {
                             bookTitle = ""
                             bookAuthor = ""
@@ -418,6 +429,8 @@ fun MainAppScreen(
                         profile = activeProfile,
                         customFontFamily = activeFontFamily,
                         customProfiles = customProfiles,
+                        nextChapter = nextChapter,
+                        onStartNextSection = { viewModel.navigateToNextChapter() },
                         onChapterSelected = { ch -> viewModel.selectChapter(ch) },
                         onPreviousSentence = { viewModel.previousSentence() },
                         onNextSentence = { viewModel.nextSentence() },
@@ -993,6 +1006,12 @@ fun ClassDashboardScreen(
 @Composable
 fun ClassWorkspaceScreen(
     books: List<Book>,
+    wikiRecommendations: List<WikiRecommendation>,
+    isGeneratingWiki: Boolean,
+    wikiError: String?,
+    onGenerateRecommendations: (String) -> Unit,
+    onDownloadBook: (WikiRecommendation) -> Unit,
+    onClearRecommendations: () -> Unit,
     onAddBookClick: () -> Unit,
     onBookSelected: (Book) -> Unit,
     onDeleteBook: (String) -> Unit
@@ -1031,7 +1050,7 @@ fun ClassWorkspaceScreen(
         if (books.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(0.4f)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
@@ -1039,27 +1058,28 @@ fun ClassWorkspaceScreen(
                     Icon(
                         Icons.Default.Info,
                         contentDescription = null,
-                        modifier = Modifier.size(64.dp),
+                        modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "Class Workspace empty",
                         color = Color.Gray,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp
                     )
                     Text(
-                        text = "Upload academic pdfs, epubs or notes. We automatically parse structure and outline.",
-                        fontSize = 11.sp,
+                        text = "Upload academic PDFs, EPUBs, or notes. We automatically parse structure and outline.",
+                        fontSize = 10.sp,
                         color = Color.Gray.copy(alpha = 0.8f),
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 32.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
             }
         } else {
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(0.5f),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(books) { book ->
@@ -1074,14 +1094,14 @@ fun ClassWorkspaceScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .padding(14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = book.title,
-                                    fontSize = 16.sp,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1124,6 +1144,206 @@ fun ClassWorkspaceScreen(
                 }
             }
         }
+
+        // --- Wikipedia Course Guide / Assistant Section ---
+        Spacer(modifier = Modifier.height(12.dp))
+        HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(0.5f),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Wikipedia Lesson Builder",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Request Wikipedia article recommendations for this class and index them directly as course books.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                    lineHeight = 15.sp
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                var promptText by remember { mutableStateOf("") }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = promptText,
+                        onValueChange = { promptText = it },
+                        placeholder = { Text("E.g., Quantum Mechanics, Space, Neuroscience...", fontSize = 11.sp) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        ),
+                        singleLine = true
+                    )
+
+                    Button(
+                        onClick = {
+                            if (promptText.isNotBlank()) {
+                                onGenerateRecommendations(promptText)
+                            }
+                        },
+                        enabled = !isGeneratingWiki && promptText.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(48.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp)
+                    ) {
+                        if (isGeneratingWiki) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("Guide Me", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                if (wikiError != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = wikiError ?: "",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (wikiRecommendations.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "RECOMMENDED ARTICLES",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            letterSpacing = 0.5.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        TextButton(
+                            onClick = onClearRecommendations,
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("Clear", fontSize = 11.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(wikiRecommendations) { item ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                        Text(
+                                            text = item.title,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = item.description,
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            lineHeight = 13.sp
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = { onDownloadBook(item) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(32.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Download,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Index", fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No active curriculum. Request above to plan your study.",
+                            color = Color.Gray.copy(alpha = 0.7f),
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1143,6 +1363,8 @@ fun ReadingWorkspaceScreen(
     profile: MixProfile,
     customFontFamily: FontFamily?,
     customProfiles: List<MixProfile>,
+    nextChapter: Chapter?,
+    onStartNextSection: () -> Unit,
     onChapterSelected: (Chapter) -> Unit,
     onPreviousSentence: () -> Unit,
     onNextSentence: () -> Unit,
@@ -1225,6 +1447,8 @@ fun ReadingWorkspaceScreen(
                         profile = profile,
                         customFontFamily = customFontFamily,
                         customProfiles = customProfiles,
+                        nextChapter = nextChapter,
+                        onStartNextSection = onStartNextSection,
                         onPrevious = onPreviousSentence,
                         onNext = onNextSentence,
                         onSentenceSelected = onSentenceSelected,
@@ -1611,6 +1835,8 @@ fun ReadSentencePane(
     profile: MixProfile,
     customFontFamily: FontFamily?,
     customProfiles: List<MixProfile>,
+    nextChapter: Chapter?,
+    onStartNextSection: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSentenceSelected: (Int) -> Unit,
@@ -1756,6 +1982,38 @@ fun ReadSentencePane(
                                 .padding(top = 12.dp)
                                 .clickable { onNext() }
                         )
+                    } else if (nextChapter != null) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onStartNextSection() }
+                                .padding(top = 12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Ready to continue? Start: ${nextChapter.title}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                     }
                 }
             }

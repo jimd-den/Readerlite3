@@ -88,6 +88,80 @@ class ClassifyContentUseCase {
     }
 }
 
+class NormalizeNavigationOutlineUseCase(
+    private val classifyContentUseCase: ClassifyContentUseCase
+) {
+    fun execute(
+        outline: BookOutline,
+        manifest: PublicationManifest
+    ): BookOutline {
+        val normalizedTitle = manifest.title?.lowercase()?.trim() ?: ""
+
+        fun safeUrlDecode(url: String): String {
+            return try {
+                java.net.URLDecoder.decode(url.replace("+", "%2B"), "UTF-8")
+            } catch (e: Exception) {
+                url
+            }
+        }
+
+        fun normalizeNode(node: OutlineNode): OutlineNode {
+            val cleanHref = node.href.substringBefore("#")
+            val decodedCleanHref = safeUrlDecode(cleanHref).lowercase()
+            
+            // Find spine item matching decoded href
+            val spineMatch = manifest.spine.find { 
+                val spineDecoded = safeUrlDecode(it.href).lowercase()
+                spineDecoded == decodedCleanHref ||
+                spineDecoded.endsWith("/$decodedCleanHref") ||
+                decodedCleanHref.endsWith("/$spineDecoded")
+            }
+            val isLinear = spineMatch?.isLinear ?: true
+            
+            val manifestItem = manifest.manifestItems.values.find {
+                val itemDecoded = safeUrlDecode(it.href).lowercase()
+                itemDecoded == decodedCleanHref ||
+                itemDecoded.endsWith("/$decodedCleanHref") ||
+                decodedCleanHref.endsWith("/$itemDecoded")
+            }
+            val properties = manifestItem?.properties ?: spineMatch?.properties
+
+            val (policy, determinedType) = classifyContentUseCase.determineClassification(
+                href = node.href,
+                isLinear = isLinear,
+                properties = properties,
+                title = node.title,
+                depth = node.depth
+            )
+
+            // Detect cover / title wrapper nodes whose title matches manifest.title
+            val isTitleWrapper = node.title.lowercase().trim() == normalizedTitle && normalizedTitle.isNotEmpty()
+            val finalType = if (isTitleWrapper) {
+                OutlineNodeType.FRONT_MATTER
+            } else {
+                determinedType
+            }
+
+            val isBodyMatter = policy == ClassificationPolicy.INCLUDE_IN_READING || 
+                    policy == ClassificationPolicy.INCLUDE_IN_OUTLINE_ONLY ||
+                    finalType == OutlineNodeType.CHAPTER ||
+                    finalType == OutlineNodeType.SECTION ||
+                    finalType == OutlineNodeType.SUBSECTION
+
+            val normalizedChildren = node.children.map { normalizeNode(it) }
+
+            return node.copy(
+                type = finalType,
+                isLinear = isLinear,
+                isBodyMatter = isBodyMatter,
+                children = normalizedChildren
+            )
+        }
+
+        return BookOutline(outline.roots.map { normalizeNode(it) })
+    }
+}
+
 class ExtractReadableSectionsUseCase(private val contentExtractor: EpubContentExtractor) {
     fun execute(
         zipFiles: Map<String, ByteArray>,

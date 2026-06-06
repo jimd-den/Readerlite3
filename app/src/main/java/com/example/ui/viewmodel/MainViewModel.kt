@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ReaderApplication
 import com.example.data.gateway.AiGateway
+import com.example.ui.util.AppSettings
 import com.example.domain.model.*
 import com.example.domain.repository.StudyRepository
 import com.example.domain.service.TextSanitizer
@@ -133,6 +134,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _activeProfile = MutableStateFlow<MixProfile>(MixProfile.BUILT_IN_PROFILES.first())
     val activeProfile: StateFlow<MixProfile> = _activeProfile.asStateFlow()
+
+    // Wikipedia Recommended curriculum states
+    private val _wikiRecommendations = MutableStateFlow<List<WikiRecommendation>>(emptyList())
+    val wikiRecommendations: StateFlow<List<WikiRecommendation>> = _wikiRecommendations.asStateFlow()
+
+    private val _isGeneratingWiki = MutableStateFlow(false)
+    val isGeneratingWiki: StateFlow<Boolean> = _isGeneratingWiki.asStateFlow()
+
+    private val _wikiError = MutableStateFlow<String?>(null)
+    val wikiError: StateFlow<String?> = _wikiError.asStateFlow()
+
+    // Next section / Continuous Reading state flow
+    val nextChapter: StateFlow<Chapter?> = _selectedBookId
+        .flatMapLatest { bookId ->
+            if (bookId == null) flowOf(null)
+            else combine(activeChapter, chapters) { active, all ->
+                if (active == null || all.isEmpty()) null
+                else {
+                    val idx = all.indexOfFirst { it.id == active.id }
+                    if (idx >= 0 && idx < all.size - 1) all[idx + 1] else null
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         _customProfiles.value = loadCustomProfilesFromPrefs()
@@ -598,5 +623,145 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun saveCustomProfileToPrefs(profile: MixProfile) {
         val data = "${profile.id};${profile.name};${profile.chaosLevel};${profile.tempoScale};${profile.sizeScale};${profile.weightContrast};${profile.opacityDepth}"
         prefs.edit().putString("custom_profile:${profile.id}", data).apply()
+    }
+
+    fun generateWikiRecommendations(prompt: String) {
+        if (prompt.isBlank()) return
+        _isGeneratingWiki.value = true
+        _wikiError.value = null
+        viewModelScope.launch {
+            try {
+                val openRouterKey = AppSettings.getOpenRouterKey(getApplication())
+                val openRouterModel = AppSettings.getOpenRouterModel(getApplication())
+                val list = AiGateway.getWikipediaRecommendations(
+                    prompt = prompt,
+                    openRouterKey = openRouterKey,
+                    openRouterModel = openRouterModel
+                )
+                _wikiRecommendations.value = list
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _wikiError.value = e.localizedMessage ?: "Failed to generate recommendations"
+            } finally {
+                _isGeneratingWiki.value = false
+            }
+        }
+    }
+
+    fun clearWikiRecommendations() {
+        _wikiRecommendations.value = emptyList()
+        _wikiError.value = null
+    }
+
+    fun downloadWikipediaBook(recommendation: WikiRecommendation) {
+        val classId = _selectedClassId.value ?: return
+        _isBookImporting.value = true
+        _bookImportStatus.value = "Downloading raw Wikipedia text..."
+        _bookImportError.value = null
+
+        viewModelScope.launch {
+            try {
+                // Fetch Wikipedia article page text
+                val pageText = AiGateway.fetchWikipediaArticle(recommendation.articleKey)
+                if (pageText.isBlank()) {
+                    throw Exception("Retrieved page content is empty")
+                }
+                
+                _bookImportStatus.value = "Formatting and parsing structure..."
+                val structure = parseWikipediaText(recommendation.title, pageText)
+                
+                _bookImportStatus.value = "Persisting Wikipedia textbook to class..."
+                importBookUseCase.execute(
+                    classId = classId,
+                    title = recommendation.title,
+                    author = "Wikipedia Contributors",
+                    fileType = "WIKI",
+                    filePath = "wiki/${recommendation.articleKey}",
+                    rawContent = "",
+                    inputStreamProvider = { null },
+                    structureOfWiki = structure
+                )
+                
+                _bookImportStatus.value = "Import completed successfully!"
+                _uiEvent.emit("Successfully downloaded and indexed '${recommendation.title}'!")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _bookImportError.value = "Wikipedia Download Error: " + (e.localizedMessage ?: "Connection failed.")
+            } finally {
+                _isBookImporting.value = false
+            }
+        }
+    }
+
+    private fun parseWikipediaText(title: String, text: String): EpubStructureDomainModel {
+        val chapters = mutableListOf<ParsedChapterDomain>()
+        val sentences = mutableListOf<ParsedSentenceDomain>()
+
+        // Chapter 0: Introduction
+        chapters.add(ParsedChapterDomain(
+            title = "Introduction",
+            isSubchapter = false,
+            parentTitle = null,
+            nestingLevel = 0
+        ))
+
+        var currentChapterIndex = 0
+        var sentenceIndex = 0
+        val lines = text.split("\n")
+        var currentSubheading: String? = "Introduction"
+
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) continue
+
+            if (trimmed.startsWith("==") && trimmed.endsWith("==")) {
+                val isSub = trimmed.startsWith("===") && trimmed.endsWith("===")
+                val headerText = trimmed.replace("=", "").trim()
+                if (headerText.isEmpty() || 
+                    headerText.equals("References", true) || 
+                    headerText.equals("External links", true) || 
+                    headerText.equals("See also", true) || 
+                    headerText.equals("Further reading", true) || 
+                    headerText.equals("Sources", true)
+                ) {
+                    continue
+                }
+
+                chapters.add(ParsedChapterDomain(
+                    title = headerText,
+                    isSubchapter = isSub,
+                    parentTitle = if (isSub) chapters.firstOrNull { !it.isSubchapter }?.title else null,
+                    nestingLevel = if (isSub) 1 else 0
+                ))
+                currentChapterIndex = chapters.lastIndex
+                currentSubheading = headerText
+                sentenceIndex = 0
+            } else {
+                val sentenceSplits = trimmed.split(Regex("(?<=[.!?])\\s+"))
+                for (sent in sentenceSplits) {
+                    val cleanSentTxt = sent.trim()
+                    if (cleanSentTxt.isNotEmpty()) {
+                        sentences.add(ParsedSentenceDomain(
+                            chapterIndex = currentChapterIndex,
+                            sentenceIndex = sentenceIndex++,
+                            text = cleanSentTxt,
+                            sectionTitle = currentSubheading ?: "Introduction"
+                        ))
+                    }
+                }
+            }
+        }
+
+        return EpubStructureDomainModel(
+            title = title,
+            author = "Wikipedia Contributors",
+            chapters = chapters,
+            sentences = sentences
+        )
+    }
+
+    fun navigateToNextChapter() {
+        val nextCh = nextChapter.value ?: return
+        selectChapter(nextCh)
     }
 }

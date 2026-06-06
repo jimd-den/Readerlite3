@@ -387,7 +387,7 @@ class EpubNavigationParserImpl(
             id = selfId,
             title = sanitizer.sanitize(node.title),
             href = node.href,
-            type = if (depth == 0) OutlineNodeType.CHAPTER else OutlineNodeType.SUBSECTION,
+            type = OutlineNodeType.UNKNOWN,
             children = mappedChildren,
             parentId = parentId,
             depth = depth

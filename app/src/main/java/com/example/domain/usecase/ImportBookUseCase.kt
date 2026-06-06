@@ -16,9 +16,12 @@ class ImportBookUseCase(
         fileType: String,
         filePath: String,
         rawContent: String,
-        inputStreamProvider: () -> InputStream?
+        inputStreamProvider: () -> InputStream?,
+        structureOfWiki: EpubStructureDomainModel? = null
     ): String {
-        val structure = if (fileType == "EPUB") {
+        val structure = if (structureOfWiki != null) {
+            structureOfWiki
+        } else if (fileType == "EPUB") {
             val stream = inputStreamProvider()
             if (stream != null) {
                 try {

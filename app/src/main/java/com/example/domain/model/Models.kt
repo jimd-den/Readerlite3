@@ -62,3 +62,10 @@ data class SavedRewrite(
     val rewrittenText: String,
     val createdAt: Long = System.currentTimeMillis()
 )
+
+data class WikiRecommendation(
+    val title: String,
+    val description: String,
+    val articleKey: String
+)
+
