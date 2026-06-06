@@ -145,6 +145,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _wikiError = MutableStateFlow<String?>(null)
     val wikiError: StateFlow<String?> = _wikiError.asStateFlow()
 
+    private val _wikiSourceProvider = MutableStateFlow(AppSettings.getWikiSourceProvider(getApplication()))
+    val wikiSourceProvider: StateFlow<String> = _wikiSourceProvider.asStateFlow()
+
+    fun selectWikiSourceProvider(provider: String) {
+        _wikiSourceProvider.value = provider.lowercase()
+        AppSettings.setWikiSourceProvider(getApplication(), provider.lowercase())
+    }
+
     // Next section / Continuous Reading state flow
     val nextChapter: StateFlow<Chapter?> = _selectedBookId
         .flatMapLatest { bookId ->
@@ -631,10 +639,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _wikiError.value = null
         viewModelScope.launch {
             try {
+                val provider = _wikiSourceProvider.value
                 val openRouterKey = AppSettings.getOpenRouterKey(getApplication())
                 val openRouterModel = AppSettings.getOpenRouterModel(getApplication())
                 val list = AiGateway.getWikipediaRecommendations(
                     prompt = prompt,
+                    provider = provider,
                     openRouterKey = openRouterKey,
                     openRouterModel = openRouterModel
                 )

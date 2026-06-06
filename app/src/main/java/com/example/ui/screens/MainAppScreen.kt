@@ -151,6 +151,7 @@ fun MainAppScreen(
     val wikiRecommendations by viewModel.wikiRecommendations.collectAsState()
     val isGeneratingWiki by viewModel.isGeneratingWiki.collectAsState()
     val wikiError by viewModel.wikiError.collectAsState()
+    val wikiSourceProvider by viewModel.wikiSourceProvider.collectAsState()
     val nextChapter by viewModel.nextChapter.collectAsState()
     val rewrittenSentences by viewModel.rewrittenSentences.collectAsState()
 
@@ -236,13 +237,12 @@ fun MainAppScreen(
                         ) {
                             Icon(Icons.Default.FileUpload, contentDescription = "Import Material")
                         }
-                    } else if (currentScreen == ScreenState.ReadingWorkspace) {
-                        IconButton(
-                            onClick = { showSettingsDialog = true },
-                            modifier = Modifier.testTag("global_settings_button")
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
-                        }
+                    }
+                    IconButton(
+                        onClick = { showSettingsDialog = true },
+                        modifier = Modifier.testTag("global_settings_button")
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -397,6 +397,8 @@ fun MainAppScreen(
                         wikiRecommendations = wikiRecommendations,
                         isGeneratingWiki = isGeneratingWiki,
                         wikiError = wikiError,
+                        wikiSourceProvider = wikiSourceProvider,
+                        onSelectWikiProvider = { provider -> viewModel.selectWikiSourceProvider(provider) },
                         onGenerateRecommendations = { prompt -> viewModel.generateWikiRecommendations(prompt) },
                         onDownloadBook = { rec -> viewModel.downloadWikipediaBook(rec) },
                         onClearRecommendations = { viewModel.clearWikiRecommendations() },
@@ -1009,6 +1011,8 @@ fun ClassWorkspaceScreen(
     wikiRecommendations: List<WikiRecommendation>,
     isGeneratingWiki: Boolean,
     wikiError: String?,
+    wikiSourceProvider: String,
+    onSelectWikiProvider: (String) -> Unit,
     onGenerateRecommendations: (String) -> Unit,
     onDownloadBook: (WikiRecommendation) -> Unit,
     onClearRecommendations: () -> Unit,
@@ -1188,6 +1192,82 @@ fun ClassWorkspaceScreen(
                     lineHeight = 15.sp
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // AI Service Provider Choice Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "AI Engine:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                    )
+
+                    listOf("gemini" to "Direct Gemini", "openrouter" to "OpenRouter", "simulation" to "Demo Sim").forEach { (id, label) ->
+                        val isSelected = wikiSourceProvider.lowercase() == id
+
+                        val containerCol = if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                        }
+                        val contentCol = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        val borderCol = if (isSelected) {
+                            Color.Transparent
+                        } else {
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        }
+
+                        Surface(
+                            onClick = { onSelectWikiProvider(id) },
+                            shape = RoundedCornerShape(8.dp),
+                            color = containerCol,
+                            contentColor = contentCol,
+                            border = BorderStroke(1.dp, borderCol),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(30.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    val icon = when (id) {
+                                        "gemini" -> Icons.Default.AutoAwesome
+                                        "openrouter" -> Icons.Default.Cloud
+                                        else -> Icons.Default.Bolt
+                                    }
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = label,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(10.dp))
 
                 var promptText by remember { mutableStateOf("") }
@@ -1238,13 +1318,46 @@ fun ClassWorkspaceScreen(
                 }
 
                 if (wikiError != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = wikiError ?: "",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.95f),
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Error notification icon",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "AI Service Error",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = wikiError ?: "An unknown exception occurred.",
+                                    fontSize = 10.5.sp,
+                                    lineHeight = 14.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

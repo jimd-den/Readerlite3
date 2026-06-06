@@ -23,10 +23,21 @@ object AppSettings {
     private const val KEY_DOWNLOADED_FONTS = "downloaded_fonts"
     private const val KEY_ACTIVE_PROFILE_ID = "active_profile_id"
     private const val KEY_CREATIVITY_LEVEL = "creative_dial_level" // live creativity dial
+    private const val KEY_WIKI_SOURCE_PROVIDER = "wiki_source_provider"
 
     private const val DEFAULT_MODEL = "meta-llama/llama-3-8b-instruct:free"
 
     private val httpClient = OkHttpClient()
+
+    fun getWikiSourceProvider(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_WIKI_SOURCE_PROVIDER, "gemini") ?: "gemini"
+    }
+
+    fun setWikiSourceProvider(context: Context, provider: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_WIKI_SOURCE_PROVIDER, provider.lowercase()).apply()
+    }
 
     fun getOpenRouterKey(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

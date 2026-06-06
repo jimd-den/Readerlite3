@@ -257,17 +257,25 @@ object AiGateway {
 
     suspend fun getWikipediaRecommendations(
         prompt: String,
+        provider: String = "gemini",
         openRouterKey: String? = null,
         openRouterModel: String? = null,
         forceSimulation: Boolean = false
     ): List<WikiRecommendation> = withContext(Dispatchers.IO) {
-        val hasOpenRouter = !openRouterKey.isNullOrBlank()
+        val useSimulation = forceSimulation || provider == "simulation"
         val geminiApiKey = BuildConfig.GEMINI_API_KEY
         val hasValidGeminiKey = geminiApiKey.isNotEmpty() && geminiApiKey != "MY_GEMINI_API_KEY" && !geminiApiKey.contains("placeholder", ignoreCase = true)
 
-        if (forceSimulation || (!hasOpenRouter && !hasValidGeminiKey)) {
+        if (useSimulation) {
             Log.w(TAG, "Using high-quality fallback Wikipedia recommendations for: $prompt")
             return@withContext simulateWikiRecommendations(prompt)
+        }
+
+        if (provider == "openrouter" && openRouterKey.isNullOrBlank()) {
+            throw Exception("OpenRouter API key is missing. Tap the Settings cog at the top-right of the screen to input your OpenRouter API Key.")
+        }
+        if (provider == "gemini" && !hasValidGeminiKey) {
+            throw Exception("Gemini API key is not configured/injected. Tap the Settings cog at the top-right to use OpenRouter, or check your environment variables.")
         }
 
         val systemPrompt = """
@@ -283,7 +291,7 @@ object AiGateway {
         """.trimIndent()
 
         try {
-            val text = if (hasOpenRouter) {
+            val text = if (provider == "openrouter") {
                 val requestModel = if (openRouterModel.isNullOrBlank() || openRouterModel == "openrouter/auto") "meta-llama/llama-3-8b-instruct:free" else openRouterModel
                 Log.d(TAG, "Fetching Wikipedia recommendations via OpenRouter using model: $requestModel")
                 val requestJson = JSONObject().apply {
@@ -312,7 +320,7 @@ object AiGateway {
                 client.newCall(request).execute().use { response ->
                     val responseBodyStr = response.body?.string() ?: ""
                     if (!response.isSuccessful) {
-                        throw Exception("OpenRouter recommendations API failed. Code: ${response.code}: $responseBodyStr")
+                        throw Exception("OpenRouter API Failed (Status Code ${response.code}): $responseBodyStr")
                     }
 
                     val responseJson = JSONObject(responseBodyStr)
@@ -351,7 +359,7 @@ object AiGateway {
                 client.newCall(request).execute().use { response ->
                     val responseBodyStr = response.body?.string() ?: ""
                     if (!response.isSuccessful) {
-                        throw Exception("Google Gemini recommended articles API failed. Code: ${response.code}")
+                        throw Exception("Google Gemini API Failed (Status Code ${response.code}): $responseBodyStr")
                     }
 
                     val responseJson = JSONObject(responseBodyStr)
@@ -388,8 +396,8 @@ object AiGateway {
             }
             return@withContext list
         } catch (e: Exception) {
-            Log.e(TAG, "Error generating Wikipedia recommendations, falling back to simulation", e)
-            return@withContext simulateWikiRecommendations(prompt)
+            Log.e(TAG, "Error generating Wikipedia recommendations", e)
+            throw e
         }
     }
 
