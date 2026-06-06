@@ -251,7 +251,7 @@ class StudyRepositoryImpl(
         prompt: String,
         rewrittenText: String
     ) {
-        val id = UUID.randomUUID().toString()
+        val id = "${bookId}_ch_${chapterIndex}"
         savedRewriteDao.insertRewrite(
             SavedRewriteEntity(
                 id = id,

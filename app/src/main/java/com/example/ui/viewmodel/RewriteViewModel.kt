@@ -69,6 +69,7 @@ class RewriteViewModel(
         chapterIndex: Int,
         style: String,
         customPrompt: String?,
+        provider: String,
         openRouterKey: String,
         openRouterModel: String,
         forceSimulation: Boolean,
@@ -89,14 +90,30 @@ class RewriteViewModel(
                 _rewriteProgress.value = "Reading ${originalSentences.size} original sentences..."
                 val fullText = originalSentences.joinToString(" ") { it.text }
 
-                val rewritten = if (openRouterKey.isNotBlank()) {
-                    _rewriteProgress.value = "Connecting to OpenRouter..."
-                    _uiEvent.emit("Sending rewrite request to OpenRouter...")
-                    AiGateway.rewriteChapterOpenRouter(openRouterKey, openRouterModel, fullText, customPrompt ?: style)
-                } else {
-                    _rewriteProgress.value = "Sending request to Gemini API..."
-                    _uiEvent.emit("Sending rewrite request to Gemini...")
-                    AiGateway.rewriteChapter(fullText, style, customPrompt, forceSimulation)
+                val rewritten = when (provider.lowercase()) {
+                    "openrouter" -> {
+                        if (openRouterKey.isBlank()) {
+                            throw Exception("OpenRouter API key is missing. Tap the Settings cog at the top-right of the screen to input your OpenRouter API Key.")
+                        }
+                        _rewriteProgress.value = "Connecting to OpenRouter..."
+                        _uiEvent.emit("Sending rewrite request to OpenRouter...")
+                        AiGateway.rewriteChapterOpenRouter(openRouterKey, openRouterModel, fullText, customPrompt ?: style)
+                    }
+                    "gemini" -> {
+                        val geminiApiKey = com.example.BuildConfig.GEMINI_API_KEY
+                        val hasValidGeminiKey = geminiApiKey.isNotEmpty() && geminiApiKey != "MY_GEMINI_API_KEY" && !geminiApiKey.contains("placeholder", ignoreCase = true)
+                        if (!hasValidGeminiKey) {
+                            throw Exception("Gemini API key is not configured/injected. Tap the Settings cog at the top-right of the screen to use OpenRouter, or check your environment variables.")
+                        }
+                        _rewriteProgress.value = "Sending request to Gemini API..."
+                        _uiEvent.emit("Sending rewrite request to Gemini...")
+                        AiGateway.rewriteChapter(fullText, style, customPrompt, forceSimulation = false)
+                    }
+                    else -> {
+                        _rewriteProgress.value = "Simulating education style adaptation..."
+                        _uiEvent.emit("Generating offline educational simulation...")
+                        AiGateway.rewriteChapter(fullText, style, customPrompt, forceSimulation = true)
+                    }
                 }
 
                 _rewriteProgress.value = "Success! Saving adapted structure..."

@@ -130,7 +130,7 @@ interface NoteDao {
 
 @Dao
 interface SavedRewriteDao {
-    @Query("SELECT * FROM saved_rewrites WHERE bookId = :bookId AND chapterIndex = :chapterIndex LIMIT 1")
+    @Query("SELECT * FROM saved_rewrites WHERE bookId = :bookId AND chapterIndex = :chapterIndex ORDER BY createdAt DESC LIMIT 1")
     suspend fun getRewriteForChapter(bookId: String, chapterIndex: Int): SavedRewriteEntity?
 
     @Query("SELECT * FROM saved_rewrites WHERE bookId = :bookId ORDER BY createdAt DESC")

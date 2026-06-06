@@ -211,6 +211,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+
+        // Automatically sync active reading mode with saved rewrite availability on chapter change
+        viewModelScope.launch {
+            activeRewrite.collect { rewrite ->
+                if (rewrite == null) {
+                    _currentReadingMode.value = "ORIGINAL"
+                } else {
+                    _currentReadingMode.value = "REWRITE"
+                }
+            }
+        }
     }
 
     private fun postRewriteNotification(title: String, text: String) {
@@ -459,9 +470,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             chapterIndex = chapterIndex,
             style = style,
             customPrompt = customPrompt,
+            provider = _wikiSourceProvider.value,
             openRouterKey = openRouterKey.value,
             openRouterModel = openRouterModel.value,
-            forceSimulation = forceSimulation,
+            forceSimulation = _wikiSourceProvider.value == "simulation",
             onSuccess = {
                 if (_selectedChapterIndex.value == chapterIndex) {
                     _currentReadingMode.value = "REWRITE"
