@@ -263,7 +263,9 @@ object AiGateway {
         forceSimulation: Boolean = false
     ): List<WikiRecommendation> = withContext(Dispatchers.IO) {
         val useSimulation = forceSimulation || provider == "simulation"
-        val geminiApiKey = BuildConfig.GEMINI_API_KEY
+        val customKey = if (!openRouterKey.isNullOrBlank()) openRouterKey else ""
+        val fallbackGeminiKey = BuildConfig.GEMINI_API_KEY
+        val geminiApiKey = if (customKey.isNotEmpty() && provider == "gemini") customKey else fallbackGeminiKey
         val hasValidGeminiKey = geminiApiKey.isNotEmpty() && geminiApiKey != "MY_GEMINI_API_KEY" && !geminiApiKey.contains("placeholder", ignoreCase = true)
 
         if (useSimulation) {
@@ -272,10 +274,10 @@ object AiGateway {
         }
 
         if (provider == "openrouter" && openRouterKey.isNullOrBlank()) {
-            throw Exception("OpenRouter API key is missing. Tap the Settings cog at the top-right of the screen to input your OpenRouter API Key.")
+            throw Exception("OpenRouter API key is missing. Tap the settings icon in the Wikipedia block or global settings to configure it.")
         }
         if (provider == "gemini" && !hasValidGeminiKey) {
-            throw Exception("Gemini API key is not configured/injected. Tap the Settings cog at the top-right to use OpenRouter, or check your environment variables.")
+            throw Exception("Gemini API key is not configured. Tap the settings icon in the Wikipedia block to supply your custom Gemini API key.")
         }
 
         val systemPrompt = """
@@ -350,9 +352,14 @@ object AiGateway {
                     })
                 }
 
+                val requestModel = if (openRouterModel.isNullOrBlank() || openRouterModel.contains("llama") || openRouterModel.contains("mistral") || openRouterModel.contains("phi-3") || openRouterModel == "openrouter/auto") {
+                    "gemini-3.5-flash"
+                } else {
+                    openRouterModel
+                }
                 val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
                 val request = Request.Builder()
-                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$geminiApiKey")
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/$requestModel:generateContent?key=$geminiApiKey")
                     .post(requestBody)
                     .build()
 

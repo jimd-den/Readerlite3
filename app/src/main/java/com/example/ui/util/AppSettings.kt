@@ -24,6 +24,8 @@ object AppSettings {
     private const val KEY_ACTIVE_PROFILE_ID = "active_profile_id"
     private const val KEY_CREATIVITY_LEVEL = "creative_dial_level" // live creativity dial
     private const val KEY_WIKI_SOURCE_PROVIDER = "wiki_source_provider"
+    private const val KEY_WIKI_CUSTOM_API_KEY = "wiki_custom_api_key"
+    private const val KEY_WIKI_CUSTOM_MODEL = "wiki_custom_model"
 
     private const val DEFAULT_MODEL = "meta-llama/llama-3-8b-instruct:free"
 
@@ -37,6 +39,26 @@ object AppSettings {
     fun setWikiSourceProvider(context: Context, provider: String) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_WIKI_SOURCE_PROVIDER, provider.lowercase()).apply()
+    }
+
+    fun getWikiCustomApiKey(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_WIKI_CUSTOM_API_KEY, "") ?: ""
+    }
+
+    fun setWikiCustomApiKey(context: Context, key: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_WIKI_CUSTOM_API_KEY, key).apply()
+    }
+
+    fun getWikiCustomModel(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_WIKI_CUSTOM_MODEL, "") ?: ""
+    }
+
+    fun setWikiCustomModel(context: Context, model: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_WIKI_CUSTOM_MODEL, model).apply()
     }
 
     fun getOpenRouterKey(context: Context): String {

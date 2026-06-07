@@ -148,9 +148,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _wikiSourceProvider = MutableStateFlow(AppSettings.getWikiSourceProvider(getApplication()))
     val wikiSourceProvider: StateFlow<String> = _wikiSourceProvider.asStateFlow()
 
+    private val _wikiCustomApiKey = MutableStateFlow(AppSettings.getWikiCustomApiKey(getApplication()))
+    val wikiCustomApiKey: StateFlow<String> = _wikiCustomApiKey.asStateFlow()
+
+    private val _wikiCustomModel = MutableStateFlow(AppSettings.getWikiCustomModel(getApplication()))
+    val wikiCustomModel: StateFlow<String> = _wikiCustomModel.asStateFlow()
+
     fun selectWikiSourceProvider(provider: String) {
         _wikiSourceProvider.value = provider.lowercase()
         AppSettings.setWikiSourceProvider(getApplication(), provider.lowercase())
+    }
+
+    fun setWikiCustomApiKey(key: String) {
+        _wikiCustomApiKey.value = key
+        AppSettings.setWikiCustomApiKey(getApplication(), key)
+    }
+
+    fun setWikiCustomModel(model: String) {
+        _wikiCustomModel.value = model
+        AppSettings.setWikiCustomModel(getApplication(), model)
     }
 
     // Next section / Continuous Reading state flow
@@ -652,13 +668,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val provider = _wikiSourceProvider.value
-                val openRouterKey = AppSettings.getOpenRouterKey(getApplication())
-                val openRouterModel = AppSettings.getOpenRouterModel(getApplication())
+                
+                // Get custom specific settings or fallback
+                val customKey = _wikiCustomApiKey.value
+                val customModel = _wikiCustomModel.value
+                
+                val key = if (customKey.isNotBlank()) customKey else {
+                    if (provider == "openrouter") AppSettings.getOpenRouterKey(getApplication()) else ""
+                }
+                val model = if (customModel.isNotBlank()) customModel else {
+                    if (provider == "openrouter") AppSettings.getOpenRouterModel(getApplication()) else ""
+                }
+
                 val list = AiGateway.getWikipediaRecommendations(
                     prompt = prompt,
                     provider = provider,
-                    openRouterKey = openRouterKey,
-                    openRouterModel = openRouterModel
+                    openRouterKey = key,
+                    openRouterModel = model
                 )
                 _wikiRecommendations.value = list
             } catch (e: Exception) {

@@ -152,6 +152,8 @@ fun MainAppScreen(
     val isGeneratingWiki by viewModel.isGeneratingWiki.collectAsState()
     val wikiError by viewModel.wikiError.collectAsState()
     val wikiSourceProvider by viewModel.wikiSourceProvider.collectAsState()
+    val wikiCustomApiKey by viewModel.wikiCustomApiKey.collectAsState()
+    val wikiCustomModel by viewModel.wikiCustomModel.collectAsState()
     val nextChapter by viewModel.nextChapter.collectAsState()
     val rewrittenSentences by viewModel.rewrittenSentences.collectAsState()
 
@@ -398,6 +400,10 @@ fun MainAppScreen(
                         isGeneratingWiki = isGeneratingWiki,
                         wikiError = wikiError,
                         wikiSourceProvider = wikiSourceProvider,
+                        wikiCustomApiKey = wikiCustomApiKey,
+                        wikiCustomModel = wikiCustomModel,
+                        onUpdateWikiCustomApiKey = { key -> viewModel.setWikiCustomApiKey(key) },
+                        onUpdateWikiCustomModel = { model -> viewModel.setWikiCustomModel(model) },
                         onSelectWikiProvider = { provider -> viewModel.selectWikiSourceProvider(provider) },
                         onGenerateRecommendations = { prompt -> viewModel.generateWikiRecommendations(prompt) },
                         onDownloadBook = { rec -> viewModel.downloadWikipediaBook(rec) },
@@ -1012,6 +1018,10 @@ fun ClassWorkspaceScreen(
     isGeneratingWiki: Boolean,
     wikiError: String?,
     wikiSourceProvider: String,
+    wikiCustomApiKey: String,
+    wikiCustomModel: String,
+    onUpdateWikiCustomApiKey: (String) -> Unit,
+    onUpdateWikiCustomModel: (String) -> Unit,
     onSelectWikiProvider: (String) -> Unit,
     onGenerateRecommendations: (String) -> Unit,
     onDownloadBook: (WikiRecommendation) -> Unit,
@@ -1167,22 +1177,42 @@ fun ClassWorkspaceScreen(
                     .fillMaxSize()
                     .padding(14.dp)
             ) {
+                var showSettingsPanel by remember { mutableStateOf(false) }
+
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "Wikipedia Lesson Builder",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Wikipedia Lesson Builder",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { showSettingsPanel = !showSettingsPanel },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Toggle Settings",
+                            tint = if (showSettingsPanel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -1191,6 +1221,98 @@ fun ClassWorkspaceScreen(
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                     lineHeight = 15.sp
                 )
+
+                if (showSettingsPanel) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = "WIKIPEDIA BUILDER ENGINE OVERRIDES",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 0.8.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Key field
+                            Text(
+                                text = if (wikiSourceProvider == "gemini") "Custom Gemini API Key (Overrides default):" else "Custom OpenRouter API Key (Overrides default):",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = wikiCustomApiKey,
+                                onValueChange = onUpdateWikiCustomApiKey,
+                                placeholder = { 
+                                    val placeholderText = if (wikiSourceProvider == "gemini") "Using compiled Gemini key..." else "Using global OpenRouter key..."
+                                    Text(placeholderText, fontSize = 11.sp) 
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                ),
+                                singleLine = true
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Model field
+                            Text(
+                                text = if (wikiSourceProvider == "gemini") "Custom Gemini Model (e.g. gemini-2.5-flash):" else "Custom OpenRouter Model (e.g. google/gemini-2.5-flash):",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = wikiCustomModel,
+                                onValueChange = onUpdateWikiCustomModel,
+                                placeholder = {
+                                    val placeholderText = if (wikiSourceProvider == "gemini") "gemini-3.5-flash (Default)" else "meta-llama/llama-3-8b-instruct:free (Default)"
+                                    Text(placeholderText, fontSize = 11.sp)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                ),
+                                singleLine = true
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Settings saved automatically. Overrides only apply to this Lesson Builder section.",
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
